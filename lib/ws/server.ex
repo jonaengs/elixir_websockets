@@ -19,7 +19,7 @@ defmodule WS.Server do
   defp loop_acceptor(socket) do
     {:ok, client} = :gen_tcp.accept(socket)
     {:ok, pid} = Task.Supervisor.start_child(
-      WSServer.TaskSupervisor,
+      WS.Server.TaskSupervisor,
       fn -> serve(client) end
     )
     :ok = :gen_tcp.controlling_process(client, pid)
