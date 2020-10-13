@@ -2,6 +2,7 @@ defmodule WSServer do
   require OpCodes
   import DataFrames
   alias WSServer.Utils
+  use WS, parser: &parse_client_dataframe/1
 
   @num_retries 10
   @timeout 120_000  # milliseconds
@@ -41,7 +42,7 @@ defmodule WSServer do
   defp serve_loop(socket, consec_ping_c) when consec_ping_c >= @num_retries, do:
     send_close({1001, ""}, socket)
   defp serve_loop(socket, consec_ping_c) do
-    case read_dataframes(socket, &parse_client_dataframe/1) do
+    case read_dataframes(socket) do
       {:close, data} ->
         IO.inspect(data, label: "Received Close")
         IO.puts("Closing connection...")

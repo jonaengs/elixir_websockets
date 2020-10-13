@@ -3,18 +3,6 @@ defmodule DataFrames do
 
   @max_uint_16 65536
 
-  def read_dataframes(socket, parser, _opts \\ %{}, acc \\ "") do
-    with {:ok, data} <- :gen_tcp.recv(socket, 0) do
-      case parser.(data) do
-        %{fin: 1, opcode: OpCodes.close, data: data} -> {:close, data} # Close. Control frames are never fragmented, so fin=1
-        %{fin: 1, opcode: OpCodes.ping, data: data} -> {:ping, data} # Ping.
-        %{fin: 1, opcode: OpCodes.pong, data: data} -> {:pong, data} # Pong.
-        %{fin: 1, data: data} -> {:ok, acc <> data}
-        %{fin: 0, data: data} -> read_dataframes(socket, acc <> data)
-      end
-    end
-  end
-
   '''
   Parses a received dataframe.
   Returns map of the following values:

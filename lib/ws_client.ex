@@ -20,7 +20,7 @@ defmodule WSClient do
     IO.inspect(msg, label: "got msg")
     IO.inspect(df, label: "Sending df")
     send_dataframe(df, socket)
-    read_dataframes(socket, &parse_server_dataframe/1) |> IO.inspect(label: "Received data")
+    read_dataframes(socket) |> IO.inspect(label: "Received data")
     send_recv_loop(socket)
   end
 
@@ -35,5 +35,17 @@ defmodule WSClient do
 
   defp send_dataframe(dataframe, socket), do:
     :ok = :gen_tcp.send(socket, dataframe)
+
+  def read_dataframes(socket, _opts \\ %{}, acc \\ "") do
+    with {:ok, data} <- :gen_tcp.recv(socket, 0) do
+      case parse_server_dataframe(data) do
+        %{fin: 1, opcode: OpCodes.close, data: data} -> {:close, data} # Close. Control frames are never fragmented, so fin=1
+        %{fin: 1, opcode: OpCodes.ping, data: data} -> {:ping, data} # Ping.
+        %{fin: 1, opcode: OpCodes.pong, data: data} -> {:pong, data} # Pong.
+        %{fin: 1, data: data} -> {:ok, acc <> data}
+        %{fin: 0, data: data} -> read_dataframes(socket, acc <> data)
+      end
+    end
+  end
 
 end
