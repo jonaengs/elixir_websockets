@@ -15,8 +15,8 @@ defmodule DataFrames do
     <<fin::1, _rsv::3, opcode::4, 1::1, paylen::7>> <> rest
   )
   do
-    {_paylen, rest} = find_paylen(paylen, rest)
-    <<mask::32, payload::bitstring>> = rest
+    mask_and_payload = strip_paylen_bits(paylen, rest)
+    <<mask::32, payload::bitstring>> = mask_and_payload
     mask = <<mask::32>>
     data = case opcode do
       OpCodes.close -> apply_mask(mask, payload) |> parse_status_code  # Close
@@ -30,13 +30,14 @@ defmodule DataFrames do
   def parse_server_dataframe(
     <<fin::1, _rsv::3, opcode::4, 0::1, paylen::7>> <> rest
   ) do
-    {_paylen, rest} = find_paylen(paylen, rest)
-    data = case opcode do
+    rest = strip_paylen_bits(paylen, rest)
+    data =
+    case opcode do
       OpCodes.close -> parse_status_code(rest)  # Close
       _ -> rest
     end
 
-   %{fin: fin, opcode: opcode, data: data}
+    %{fin: fin, opcode: opcode, data: data}
   end
 
   def parse_status_code(payload) do
@@ -44,16 +45,15 @@ defmodule DataFrames do
     {status_code, message}
   end
 
-  def find_paylen(paylen, rest) do
+  def strip_paylen_bits(paylen, rest) do
     cond do
-      paylen == 126 ->
-        <<paylen::unsigned-big-integer-size(16), rest::bitstring>> = rest
-        {paylen, rest}
       paylen == 127 ->
-        <<paylen::64, rest::bitstring>> = rest
-        {paylen, rest}
-      paylen >= 0 ->  # Dialyzer is wrong here
-        {paylen, rest}
+        <<_paylen::64>> <> rest = rest
+        rest
+      paylen == 126 ->
+        <<_paylen::16>> <> rest = rest
+        rest
+      true -> rest
     end
   end
 

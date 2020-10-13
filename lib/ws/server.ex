@@ -1,7 +1,7 @@
-defmodule WSServer do
+defmodule WS.Server do
   require OpCodes
   import DataFrames
-  alias WSServer.Utils
+  alias WS.Utils
   import WS
   use WS, [parser: &parse_client_dataframe/1, timeout: 120_000]
 
@@ -72,7 +72,7 @@ defmodule WSServer do
 
   defp send_handshake_resp(opts, socket), do:
     :ok =
-    Utils.handshake_response(opts)
+    Utils.server_handshake(opts)
     |> Enum.join()
     |> (&:gen_tcp.send(socket, &1)).()
 

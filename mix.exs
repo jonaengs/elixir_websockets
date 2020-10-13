@@ -15,7 +15,7 @@ defmodule WS.MixProject do
   def application do
     [
       extra_applications: [:logger, :crypto],
-      mods: {WSServer.Application, []}
+      mods: {WS.Application, []}
     ]
   end
 

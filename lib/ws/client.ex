@@ -1,6 +1,6 @@
-defmodule WSClient do
+defmodule WS.Client do
   require OpCodes
-  alias WSClient.Utils
+  alias WS.Utils
   import DataFrames
   import WS
   use WS, parser: &parse_server_dataframe/1
@@ -17,12 +17,13 @@ defmodule WSClient do
   end
 
   defp send_recv_loop(socket) do
-    msg = String.trim(IO.read(:stdio, :line))
-    df = make_client_dataframe(msg, OpCodes.text, @mask)
-    IO.inspect(msg, label: "got msg")
-    IO.inspect(df, label: "Sending df")
-    send_dataframe(df, socket)
-    read_dataframes(socket) |> IO.inspect(label: "Received data")
+    IO.read(:stdio, :line)
+    |> String.trim()
+    |> IO.inspect(label: "sending message")
+    |> make_client_dataframe(OpCodes.text, @mask)
+    |> send_dataframe(socket)
+
+    inspect(read_dataframes(socket), label: "Received data")
     send_recv_loop(socket)
   end
 
