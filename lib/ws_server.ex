@@ -2,10 +2,10 @@ defmodule WSServer do
   require OpCodes
   import DataFrames
   alias WSServer.Utils
-  use WS, parser: &parse_client_dataframe/1
+  import WS
+  use WS, [parser: &parse_client_dataframe/1, timeout: 120_000]
 
   @num_retries 10
-  @timeout 120_000  # milliseconds
 
   @spec accept(char()) :: no_return()
   def accept(port) do
@@ -108,8 +108,5 @@ defmodule WSServer do
   defp send_message(msg, socket, opcode \\ 1) do
     msg |> make_server_dataframe(opcode) |> send_dataframe(socket)
   end
-
-  defp send_dataframe(dataframe, socket), do:
-    :ok = :gen_tcp.send(socket, dataframe)
 
 end

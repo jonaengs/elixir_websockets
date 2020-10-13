@@ -4,4 +4,8 @@
 **TODO: Add description**
 
 ## Installation
+install Elixir 1.10 or newer
+
+## Run
+
 

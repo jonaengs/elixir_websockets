@@ -2,6 +2,8 @@ defmodule WSClient do
   require OpCodes
   alias WSClient.Utils
   import DataFrames
+  import WS
+  use WS, parser: &parse_server_dataframe/1
 
   @mask "1234"
 
@@ -31,21 +33,6 @@ defmodule WSClient do
     # TODO: Validate handshake, confirming correctnes of key, etc.
     _handshake = :gen_tcp.recv(socket, 0)
     :ok
-  end
-
-  defp send_dataframe(dataframe, socket), do:
-    :ok = :gen_tcp.send(socket, dataframe)
-
-  def read_dataframes(socket, _opts \\ %{}, acc \\ "") do
-    with {:ok, data} <- :gen_tcp.recv(socket, 0) do
-      case parse_server_dataframe(data) do
-        %{fin: 1, opcode: OpCodes.close, data: data} -> {:close, data} # Close. Control frames are never fragmented, so fin=1
-        %{fin: 1, opcode: OpCodes.ping, data: data} -> {:ping, data} # Ping.
-        %{fin: 1, opcode: OpCodes.pong, data: data} -> {:pong, data} # Pong.
-        %{fin: 1, data: data} -> {:ok, acc <> data}
-        %{fin: 0, data: data} -> read_dataframes(socket, acc <> data)
-      end
-    end
   end
 
 end
