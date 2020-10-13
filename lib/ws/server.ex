@@ -3,7 +3,7 @@ defmodule WS.Server do
   import DataFrames
   alias WS.Utils
   import WS
-  use WS, [parser: &parse_client_dataframe/1, timeout: 120_000]
+  use WS, [parser: &parse_masked_dataframe/1, timeout: 120_000]
 
   @num_retries 10
 
@@ -67,9 +67,6 @@ defmodule WS.Server do
     end
   end
 
-  defp send_close({code, _msg}, socket), do:
-    send_message(Integer.to_string(code), socket)
-
   defp send_handshake_resp(opts, socket), do:
     :ok =
     Utils.server_handshake(opts)
@@ -84,7 +81,7 @@ defmodule WS.Server do
   '''
   defp ping(socket, msg \\ "") do
     :ok = send_message(msg, socket, OpCodes.ping)
-    case read_dataframes(socket, &parse_client_dataframe/1) do
+    case read_dataframes(socket) do
       {:pong, data} -> {true, data == msg}
       {:error, :timeout} -> {false, false}
     end
@@ -106,7 +103,11 @@ defmodule WS.Server do
   end
 
   defp send_message(msg, socket, opcode \\ 1) do
-    msg |> make_server_dataframe(opcode) |> send_dataframe(socket)
+    IO.inspect(msg, label: "server sending")
+    msg |> make_unmasked_dataframe(opcode) |> send_dataframe(socket)
   end
+
+  defp send_close({code, _msg}, socket), do:
+    send_message(Integer.to_string(code), socket)
 
 end

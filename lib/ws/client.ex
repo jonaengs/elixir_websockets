@@ -3,7 +3,7 @@ defmodule WS.Client do
   alias WS.Utils
   import DataFrames
   import WS
-  use WS, parser: &parse_server_dataframe/1
+  use WS, parser: &parse_unmasked_dataframe/1
 
   @mask "1234"
 
@@ -27,9 +27,11 @@ defmodule WS.Client do
 
   defp receive_loop(socket) do
     # TODO: handle all received cases
-    {:ok, data} = read_dataframes(socket)
-    IO.inspect(data, label: "received data")
-    receive_loop(socket)
+    case read_dataframes(socket) do
+      {:ok, data} ->
+        IO.inspect(data, label: "received data")
+        receive_loop(socket)
+    end
   end
 
   defp read_send_loop(socket) do
@@ -50,7 +52,7 @@ defmodule WS.Client do
       "/bin" <> rest -> {OpCodes.binary, rest}
       _ -> {OpCodes.text, text}
     end
-    make_client_dataframe(msg, opcode, @mask)
+    make_masked_dataframe(msg, opcode, @mask)
   end
 
   defp handshake(socket, host, subdir \\ ""), do:
@@ -61,5 +63,4 @@ defmodule WS.Client do
     _handshake = :gen_tcp.recv(socket, 0)
     :ok
   end
-
 end

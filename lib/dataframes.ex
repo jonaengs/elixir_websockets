@@ -11,7 +11,7 @@ defmodule DataFrames do
   * 1 is mask bit. Client frames must be masked
   * payload is bitstring. When opcode is 8 it is a pair {status_code: int, message: bitstring}
   """
-  def parse_client_dataframe(<<fin::1, _rsv::3, opcode::4, 1::1, paylen::7>> <> rest) do
+  def parse_masked_dataframe(<<fin::1, _rsv::3, opcode::4, 1::1, paylen::7>> <> rest) do
     <<mask::32>> <> payload = strip_paylen_bits(paylen, rest)
     mask = <<mask::32>>
     data = case opcode do
@@ -22,7 +22,7 @@ defmodule DataFrames do
    %{fin: fin, opcode: opcode, data: data}
   end
 
-  def parse_server_dataframe(<<fin::1, _rsv::3, opcode::4, 0::1, paylen::7>> <> rest) do
+  def parse_unmasked_dataframe(<<fin::1, _rsv::3, opcode::4, 0::1, paylen::7>> <> rest) do
     rest = strip_paylen_bits(paylen, rest)
     data = case opcode do
       OpCodes.close -> parse_status_code(rest)
@@ -51,12 +51,12 @@ defmodule DataFrames do
     end
   end
 
-  def make_server_dataframe(msg, opcode) do  # only supports single-frame messages atm
+  def make_unmasked_dataframe(msg, opcode) do  # only supports single-frame messages atm
     {paylen, paylen_bits} = get_msg_paylen_and_bits(msg)
     <<1::1, 0::3, opcode::4, 0::1, paylen::7>> <> paylen_bits <> msg
   end
 
-  def make_client_dataframe(msg, opcode, mask) do  # only supports single-frame messages atm
+  def make_masked_dataframe(msg, opcode, mask) do  # only supports single-frame messages atm
     {paylen, paylen_bits} = get_msg_paylen_and_bits(msg)
     payload = apply_mask(mask, msg)
     <<1::1, 0::3, opcode::4, 1::1, paylen::7>> <> paylen_bits <> mask <> payload
