@@ -14,9 +14,9 @@ defmodule WS.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger, :crypto],
-      mods: {WS.Application, []}
-    ]
+      extra_applications: [:crypto],
+      mods: {WS.Server.Application, []}
+    ] |> IO.inspect()
   end
 
   # Run "mix help deps" to learn about dependencies.

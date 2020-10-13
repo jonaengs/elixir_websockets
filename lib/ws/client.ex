@@ -13,18 +13,44 @@ defmodule WS.Client do
     {:ok, socket} = :gen_tcp.connect(String.to_charlist(host), port, opts)
     :ok = handshake(socket, host)
     :ok = validate_handshake(socket)
-    send_recv_loop(socket)
+    {:ok, send_pid} = Task.Supervisor.start_child(
+      WS.Client.TaskSupervisor,
+      fn -> read_send_loop(socket) end
+    )
+    {:ok, recv_pid} = Task.Supervisor.start_child(
+      WS.Client.TaskSupervisor,
+      fn -> receive_loop(socket) end
+    )
+    IO.inspect({send_pid, recv_pid}, label: "sender and receiver")
+    read_send_loop(socket)
   end
 
-  defp send_recv_loop(socket) do
+  defp receive_loop(socket) do
+    # TODO: handle all received cases
+    {:ok, data} = read_dataframes(socket)
+    IO.inspect(data, label: "received data")
+    receive_loop(socket)
+  end
+
+  defp read_send_loop(socket) do
     IO.read(:stdio, :line)
     |> String.trim()
     |> IO.inspect(label: "sending message")
-    |> make_client_dataframe(OpCodes.text, @mask)
+    |> parse_message()
     |> send_dataframe(socket)
 
-    inspect(read_dataframes(socket), label: "Received data")
-    send_recv_loop(socket)
+    read_send_loop(socket)
+  end
+
+  def parse_message(text) do
+    {opcode, msg} =
+    case text do
+      "/close" <> rest -> {OpCodes.close, rest}
+      "/ping" <> rest -> {OpCodes.ping, rest}
+      "/bin" <> rest -> {OpCodes.binary, rest}
+      _ -> {OpCodes.text, text}
+    end
+    make_client_dataframe(msg, opcode, @mask)
   end
 
   defp handshake(socket, host, subdir \\ ""), do:

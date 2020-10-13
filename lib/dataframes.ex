@@ -3,37 +3,29 @@ defmodule DataFrames do
 
   @max_uint_16 65536
 
-  '''
+  @doc """
   Parses a received dataframe.
   Returns map of the following values:
   * fin in (0, 1). 1 if final frame in message, 0 otherwise.
   * opcode in (0, 15).
   * 1 is mask bit. Client frames must be masked
   * payload is bitstring. When opcode is 8 it is a pair {status_code: int, message: bitstring}
-  '''
-  def parse_client_dataframe( # meaning sent from client. Client frames must be masked
-    <<fin::1, _rsv::3, opcode::4, 1::1, paylen::7>> <> rest
-  )
-  do
-    mask_and_payload = strip_paylen_bits(paylen, rest)
-    <<mask::32, payload::bitstring>> = mask_and_payload
+  """
+  def parse_client_dataframe(<<fin::1, _rsv::3, opcode::4, 1::1, paylen::7>> <> rest) do
+    <<mask::32>> <> payload = strip_paylen_bits(paylen, rest)
     mask = <<mask::32>>
     data = case opcode do
-      OpCodes.close -> apply_mask(mask, payload) |> parse_status_code  # Close
-      OpCodes.ping -> rest # Ping. Return exact same data
+      OpCodes.close -> apply_mask(mask, payload) |> parse_status_code
+      OpCodes.ping -> rest
       _ -> apply_mask(mask, payload)
     end
-
    %{fin: fin, opcode: opcode, data: data}
   end
 
-  def parse_server_dataframe(
-    <<fin::1, _rsv::3, opcode::4, 0::1, paylen::7>> <> rest
-  ) do
+  def parse_server_dataframe(<<fin::1, _rsv::3, opcode::4, 0::1, paylen::7>> <> rest) do
     rest = strip_paylen_bits(paylen, rest)
-    data =
-    case opcode do
-      OpCodes.close -> parse_status_code(rest)  # Close
+    data = case opcode do
+      OpCodes.close -> parse_status_code(rest)
       _ -> rest
     end
 
@@ -41,20 +33,13 @@ defmodule DataFrames do
   end
 
   def parse_status_code(payload) do
-    <<status_code::unsigned-big-integer-size(16), message::bitstring>> = payload
+    <<status_code::unsigned-big-integer-size(16)>> <> message = payload
     {status_code, message}
   end
 
   def strip_paylen_bits(paylen, rest) do
-    cond do
-      paylen == 127 ->
-        <<_paylen::64>> <> rest = rest
-        rest
-      paylen == 126 ->
-        <<_paylen::16>> <> rest = rest
-        rest
-      true -> rest
-    end
+    num_paylen_bytes = Map.get(%{127 => 8, 126 => 2}, paylen, 0)
+    :binary.part(rest, {num_paylen_bytes, byte_size(rest)})
   end
 
   def get_msg_paylen_and_bits(msg) do
@@ -68,7 +53,7 @@ defmodule DataFrames do
 
   def make_server_dataframe(msg, opcode) do  # only supports single-frame messages atm
     {paylen, paylen_bits} = get_msg_paylen_and_bits(msg)
-    <<1::1, 0::3, opcode::4, paylen::8>> <> paylen_bits <> msg
+    <<1::1, 0::3, opcode::4, 0::1, paylen::7>> <> paylen_bits <> msg
   end
 
   def make_client_dataframe(msg, opcode, mask) do  # only supports single-frame messages atm
