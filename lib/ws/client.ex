@@ -13,15 +13,11 @@ defmodule WS.Client do
     {:ok, socket} = :gen_tcp.connect(String.to_charlist(host), port, opts)
     :ok = handshake(socket, host)
     :ok = validate_handshake(socket)
-    {:ok, send_pid} = Task.Supervisor.start_child(
-      WS.Client.TaskSupervisor,
-      fn -> read_send_loop(socket) end
-    )
     {:ok, recv_pid} = Task.Supervisor.start_child(
       WS.Client.TaskSupervisor,
       fn -> receive_loop(socket) end
     )
-    IO.inspect({send_pid, recv_pid}, label: "sender and receiver")
+    IO.inspect(recv_pid, label: "recv child")
     read_send_loop(socket)
   end
 
@@ -31,6 +27,13 @@ defmodule WS.Client do
       {:ok, data} ->
         IO.inspect(data, label: "received data")
         receive_loop(socket)
+      {:close, data} ->
+        IO.inspect(data, label: "Received Close")
+        send_close(data, socket)
+      {:ping, data} ->
+        IO.inspect(data, label: "Received Ping")
+        send_dataframe(make_masked_dataframe(data, OpCodes.pong, @mask), socket)
+        receive_loop(socket)
     end
   end
 
@@ -38,13 +41,18 @@ defmodule WS.Client do
     IO.read(:stdio, :line)
     |> String.trim()
     |> IO.inspect(label: "sending message")
-    |> parse_message()
+    |> compose_dataframe()
     |> send_dataframe(socket)
 
     read_send_loop(socket)
   end
 
-  def parse_message(text) do
+  defp send_close({code, _msg}, socket) do
+    IO.puts("client closing")
+    Integer.to_string(code) |> make_masked_dataframe(OpCodes.close, @mask) |> send_dataframe(socket)
+  end
+
+  defp compose_dataframe(text) do
     {opcode, msg} =
     case text do
       "/close" <> rest -> {OpCodes.close, rest}
@@ -60,7 +68,7 @@ defmodule WS.Client do
 
   defp validate_handshake(socket) do
     # TODO: Validate handshake, confirming correctnes of key, etc.
-    _handshake = :gen_tcp.recv(socket, 0)
+    {:ok, _handshake} = :gen_tcp.recv(socket, 0)
     :ok
   end
 end
