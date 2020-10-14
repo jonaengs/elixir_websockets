@@ -1,18 +1,21 @@
 defmodule WS.Client do
   require OpCodes
   alias WS.Utils
-  import DataFrames
-  import WS
-  use WS, parser: &parse_unmasked_dataframe/1
+  import Frames
+  use WS, parser: &parse_unmasked_frame/2
 
   @mask "1234"
 
   @spec connect(binary, char) :: no_return()
   def connect(host, port) do
+    # IO.write("subdomain: ")
+    # subdomain = "/" <> String.trim(IO.read(:stdio, :line))
+    url = String.to_charlist(host) |> IO.inspect(label: "url")
     opts = [:binary, packet: :raw, active: false]
-    {:ok, socket} = :gen_tcp.connect(String.to_charlist(host), port, opts)
+    {:ok, socket} = :gen_tcp.connect(url, port, opts)
     :ok = handshake(socket, host)
     :ok = validate_handshake(socket)
+
     {:ok, recv_pid} = Task.Supervisor.start_child(
       WS.Client.TaskSupervisor,
       fn -> receive_loop(socket) end
@@ -23,7 +26,7 @@ defmodule WS.Client do
 
   defp receive_loop(socket) do
     # TODO: handle all received cases
-    case read_dataframes(socket) do
+    case read_frames(socket) do
       {:ok, data} ->
         IO.inspect(data, label: "received data")
         receive_loop(socket)
@@ -32,7 +35,7 @@ defmodule WS.Client do
         send_close(data, socket)
       {:ping, data} ->
         IO.inspect(data, label: "Received Ping")
-        send_dataframe(make_masked_dataframe(data, OpCodes.pong, @mask), socket)
+        send_frame(make_masked_frame(data, OpCodes.pong, @mask), socket)
         receive_loop(socket)
     end
   end
@@ -41,18 +44,18 @@ defmodule WS.Client do
     IO.read(:stdio, :line)
     |> String.trim()
     |> IO.inspect(label: "sending message")
-    |> compose_dataframe()
-    |> send_dataframe(socket)
+    |> compose_frame()
+    |> send_frame(socket)
 
     read_send_loop(socket)
   end
 
   defp send_close({code, _msg}, socket) do
     IO.puts("client closing")
-    Integer.to_string(code) |> make_masked_dataframe(OpCodes.close, @mask) |> send_dataframe(socket)
+    Integer.to_string(code) |> make_masked_frame(OpCodes.close, @mask) |> send_frame(socket)
   end
 
-  defp compose_dataframe(text) do
+  defp compose_frame(text) do
     {opcode, msg} =
     case text do
       "/close" <> rest -> {OpCodes.close, rest}
@@ -60,7 +63,7 @@ defmodule WS.Client do
       "/bin" <> rest -> {OpCodes.binary, rest}
       _ -> {OpCodes.text, text}
     end
-    make_masked_dataframe(msg, opcode, @mask)
+    make_masked_frame(msg, opcode, @mask)
   end
 
   defp handshake(socket, host, subdir \\ ""), do:
