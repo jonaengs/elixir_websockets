@@ -1,9 +1,7 @@
 defmodule WS.Server.Application do
   use Application
 
-  def start(_type, _args) do
-    port = String.to_integer(System.get_env("PORT") || "4040")
-
+  def start(_type, port) do
     children = [
       # supervisor for tasks serving connections
       {Task.Supervisor, name: WS.Server.TaskSupervisor},

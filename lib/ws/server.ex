@@ -51,7 +51,7 @@ defmodule WS.Server do
         IO.puts("Sending Pong...")
         send_message(data, socket, OpCodes.pong)
         serve_loop(socket)
-      {:ok, data} ->
+      {:text, data} ->
         IO.inspect(data, label: "Received and sending")
         send_message(data, socket)
         serve_loop(socket)
@@ -91,10 +91,12 @@ defmodule WS.Server do
       fn line, opts ->
         case line do
           "Sec-WebSocket-Key: " <> key -> Map.put(opts, :secret_key, String.trim(key))
+          "GET " <> info ->
+            Map.put(opts, :subdirectory, hd String.split(info))
           _ -> opts
         end
       end
-    )
+    ) |> IO.inspect(label: "server got handshake opts")
 
   defp read_handshake(socket) do
     {:ok, data} = :gen_tcp.recv(socket, 0)

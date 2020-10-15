@@ -13,10 +13,12 @@ defmodule WS.MixProject do
 
   # Run "mix help compile.app" to learn about applications.
   def application do
+    port = String.to_integer(System.get_env("PORT") || "4040")
+
     [
       extra_applications: [:crypto],
-      mods: {WS.Server.Application, []}
-    ] |> IO.inspect()
+      mods: {WS.Server.Application, port}
+    ]
   end
 
   # Run "mix help deps" to learn about dependencies.
