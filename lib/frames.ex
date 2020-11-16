@@ -40,7 +40,7 @@ defmodule Frames do
   * When opcode is 8 (close), the first 16 bits of the message are an unsigned int = closing code.
   Read more: https://tools.ietf.org/html/rfc6455
   """
-  def parse_masked_frame(<<fin::1, 0::3, opcode::4, 1::1, paylen::7>> <> rest, _opts \\ %{}) do
+  def parse_masked_frame(<<_fin::1, 0::3, opcode::4, 1::1, paylen::7>> <> rest, _opts \\ %{}) do
     <<mask::32>> <> payload = strip_paylen_bits(paylen, rest)
     mask = <<mask::32>>
     data = case opcode do
@@ -48,17 +48,16 @@ defmodule Frames do
       OpCodes.ping -> rest
       _ -> apply_mask(mask, payload)
     end
-   %{fin: fin, opcode: opcode, data: data}
+   {OpCodes.atomize(opcode), data}
   end
 
-  def parse_unmasked_frame(<<fin::1, 0::3, opcode::4, 0::1, paylen::7>> <> rest, _opts \\ %{}) do
+  def parse_unmasked_frame(<<_fin::1, 0::3, opcode::4, 0::1, paylen::7>> <> rest, _opts \\ %{}) do
     rest = strip_paylen_bits(paylen, rest)
     data = case opcode do
       OpCodes.close -> parse_status_code(rest)
       _ -> rest
     end
-
-    %{fin: fin, opcode: opcode, data: data}
+    {OpCodes.atomize(opcode), data}
   end
 
   def make_unmasked_frame(msg, opcode) do  # only supports single-frame messages atm

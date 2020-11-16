@@ -1,9 +1,9 @@
 defmodule WS.Utils do
   @websocket_magic_string "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
-  def client_handshake(host, subdirectory), do:
+  def client_handshake(host, channel), do:
     [
-      "GET /#{subdirectory} HTTP/1.1\r\n",
+      "GET /#{channel} HTTP/1.1\r\n",
       "Host: #{host}\r\n",
       "Upgrade: websocket\r\n",
       "Connection: Upgrade\r\n",
@@ -23,6 +23,7 @@ defmodule WS.Utils do
     "Sec-WebSocket-Accept: " <> generate_secret(secret_key) <> "\r\n",
     "\r\n"
     ]
+    |> Enum.join()
 
   defp generate_secret(secret_key), do:
     secret_key <> @websocket_magic_string

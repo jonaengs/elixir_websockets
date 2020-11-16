@@ -21,28 +21,6 @@ defmodule WS do
   Setup read_frames function for caller that uses specified
   frame parser and timeout limit
   """
-  defmacro __using__(opts) do
-    frame_parser = Keyword.get(opts, :parser)
-    timeout = Keyword.get(opts, :timeout, :infinity)
-    quote do
-      import WS
-
-      defp _read_frames(socket, parser, acc, opts) do
-        with {:ok, data} <- :gen_tcp.recv(socket, 0, unquote(timeout)) do
-          case parsed = parser.(data, opts) do
-            %{fin: 1, opcode: op, data: data} ->
-              {OpCodes.atomize(op), data}
-            %{fin: 0, opcode: op, data: data} ->
-              _read_frames(socket, parser, acc <> data, Map.put_new(opts, :opcode, op))
-          end
-        end
-      end
-
-      defp read_frames(socket, acc \\ "", opts \\ %{}) do
-        _read_frames(socket, unquote(frame_parser), acc, opts)
-      end
-    end
-  end
 
   def send_frame(frame, socket), do: :gen_tcp.send(socket, frame)
 

@@ -1,15 +1,12 @@
 defmodule WS.Server do
   require OpCodes
   import Frames
-  alias WS.Utils
-  use WS, [parser: &parse_masked_frame/2, timeout: 120_000]
-
-  @num_retries 10
+  import WS
 
   @spec accept(char()) :: no_return()
   def accept(port) do
     {:ok, socket} =
-      :gen_tcp.listen(port, [:binary, packet: :raw, active: false, reuseaddr: true])
+      :gen_tcp.listen(port, [:binary, packet: :raw, active: true, reuseaddr: true])
     IO.puts("Accepting connections on port #{port}")
     loop_acceptor(socket)
   end
@@ -21,6 +18,7 @@ defmodule WS.Server do
       WS.Server.TaskSupervisor,
       fn -> serve(client) end
     )
+    IO.inspect(pid, label: "starting server process")
     :ok = :gen_tcp.controlling_process(client, pid)
     loop_acceptor(socket)
   end
@@ -28,79 +26,61 @@ defmodule WS.Server do
   # reads input from socket and passes it back again
   defp serve(socket) do
     IO.puts("Performing handshake...")
-    socket
-    |> read_handshake
-    |> parse_handshake()
-    |> send_handshake_resp(socket)
+    opts = read_handshake() |> parse_handshake()
+
+    :ok = send_handshake_resp(opts, socket)
+    WS.Server.Register.add(opts.channel)
 
     IO.puts("Entering serve loop...")
-    serve_loop(socket)
+    serve_loop(socket, opts.channel)
   end
 
-  defp serve_loop(socket, consecutive_ping_count \\ 0)
-  defp serve_loop(socket, consec_ping_c) when consec_ping_c >= @num_retries, do:
-    send_close({1001, ""}, socket)
-  defp serve_loop(socket, consec_ping_c) do
-    case read_frames(socket) do
-      {:close, data} ->
-        IO.inspect(data, label: "Received Close")
-        IO.puts("Closing connection...")
-        send_close(data, socket)
-      {:ping, data} ->
-        IO.inspect(data, label: "Received Ping")
-        IO.puts("Sending Pong...")
-        send_message(data, socket, OpCodes.pong)
-        serve_loop(socket)
-      {:text, data} ->
-        IO.inspect(data, label: "Received and sending")
+  defp serve_loop(socket, channel) do
+    receive do
+      {:internal, data} ->
         send_message(data, socket)
-        serve_loop(socket)
-      {:error, :timeout} ->
-        IO.puts("Timed out. Performing ping...")
-        case ping(socket) do
-          {true, true} -> serve_loop(socket)
-          {false, _} ->
-            IO.puts("Performed ping without response. Trying again: \##{consec_ping_c}")
-            serve_loop(socket, consec_ping_c + 1)
+      {:tcp, socket, data} ->
+        case parse_masked_frame(data) do
+          {:close, data} ->
+            IO.inspect(data, label: "Received Close")
+            IO.puts("Closing connection...")
+            send_close(data, socket)
+            exit(:close)
+          {:ping, data} ->
+            IO.inspect(data, label: "Received Ping")
+            IO.puts("Sending Pong...")
+            send_message(data, socket, OpCodes.pong)
+         {:text, data} ->
+            IO.inspect(data, label: "Received and sending")
+            send_message(data, socket)
+            for pid <- WS.Server.Register.get(channel), pid != self() do
+              IO.inspect(pid, label: "sharing msg with")
+              send(pid, {:internal, data})
+            end
         end
     end
+    serve_loop(socket, channel)
   end
 
   defp send_handshake_resp(opts, socket), do:
-    :ok =
-    Utils.server_handshake(opts)
-    |> Enum.join()
+    WS.Utils.server_handshake(opts)
     |> (&:gen_tcp.send(socket, &1)).()
 
-  '''
-  Performs a ping and listens for a response.
-  Returns a pair of booleans indicating:
-  1. response received within timeout limit
-  2. message data matches what was sent
-  '''
-  defp ping(socket, msg \\ "") do
-    :ok = send_message(msg, socket, OpCodes.ping)
-    case read_frames(socket) do
-      {:pong, data} -> {true, data == msg}
-      {:error, :timeout} -> {false, false}
+  defp parse_handshake(handshake) do
+    for line <- String.split(handshake, "\r\n"), into: %{} do
+      case line do
+        "Sec-WebSocket-Key: " <> key -> {:secret_key, String.trim(key)}
+        "GET " <> info -> {:channel, hd String.split(info)}
+        _ -> {:nil, nil}
+      end
     end
+    |> IO.inspect(label: "server got handshake opts")
   end
 
-  defp parse_handshake(handshake), do:
-    Enum.reduce(String.split(handshake, "\r\n"), %{},
-      fn line, opts ->
-        case line do
-          "Sec-WebSocket-Key: " <> key -> Map.put(opts, :secret_key, String.trim(key))
-          "GET " <> info ->
-            Map.put(opts, :subdirectory, hd String.split(info))
-          _ -> opts
-        end
-      end
-    ) |> IO.inspect(label: "server got handshake opts")
-
-  defp read_handshake(socket) do
-    {:ok, data} = :gen_tcp.recv(socket, 0)
-    data
+  defp read_handshake() do
+    receive do
+      {:tcp, _socket, data} -> data
+    end
   end
 
   defp send_message(msg, socket, opcode \\ 1) do
